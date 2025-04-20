@@ -1,0 +1,235 @@
+import pygame
+import sys
+import random
+
+# Инициализация Pygame
+pygame.init()
+
+# Настройки экрана
+WIDTH, HEIGHT = 800, 600
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Arlios Derest PC Edition 01.00.11")
+bg_sound = pygame.mixer.Sound('Music/Music.mp3')
+
+# Цвета
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+GRAY = (100, 100, 100)
+
+# Шрифты
+font = pygame.font.SysFont("Arial", 24)
+big_font = pygame.font.SysFont("Arial", 48)
+
+# Игрок
+class Player:
+    def __init__(self):
+        self.x = WIDTH // 2
+        self.y = HEIGHT // 2
+        self.speed = 5
+        self.health = 100
+        self.max_health = 100
+        self.attack = 10
+        self.defense = 5
+        self.coins = 0
+        self.rect = pygame.Rect(self.x, self.y, 40, 40)
+
+    def draw(self):
+        pygame.draw.rect(screen, BLUE, self.rect)
+        # Полоска здоровья
+        pygame.draw.rect(screen, RED, (self.x - 20, self.y - 30, 80, 10))
+        pygame.draw.rect(screen, GREEN, (self.x - 20, self.y - 30, 80 * (self.health / self.max_health), 10))
+
+    def move(self, dx, dy):
+        self.x += dx * self.speed
+        self.y += dy * self.speed
+        self.rect.x = self.x
+        self.rect.y = self.y
+
+# Враг
+class Enemy:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.health = 50
+        self.attack = 5
+        self.rect = pygame.Rect(self.x, self.y, 40, 40)
+
+    def draw(self):
+        pygame.draw.rect(screen, RED, self.rect)
+        pygame.draw.rect(screen, RED, (self.x - 20, self.y - 30, 80, 10))
+        pygame.draw.rect(screen, GREEN, (self.x - 20, self.y - 30, 80 * (self.health / 50), 10))
+
+# Магазин
+class Shop:
+    def __init__(self):
+        self.items = {
+            "Health +20": {"cost": 10, "effect": lambda p: setattr(p, 'max_health', p.max_health + 20)},
+            "Attack +5": {"cost": 15, "effect": lambda p: setattr(p, 'attack', p.attack + 5)},
+            "Protection +3": {"cost": 12, "effect": lambda p: setattr(p, 'defense', p.defense + 3)},
+            "1000 Coins": {"cost": 0, "effect": lambda p: setattr(p, 'defense', p.defense + 3)},
+            "Health +100": {"cost": 500, "effect": lambda p: setattr(p, 'defense', p.defense + 3)},
+            "100 Coins": {"cost": 0, "effect": lambda p: setattr(p, 'defense', p.defense + 3)},
+        }
+
+    def draw(self):
+        screen.fill(GRAY)
+        title = big_font.render("Shop 1", True, WHITE)
+        screen.blit(title, (WIDTH // 2 - 100, 50))
+
+        for i, (item, data) in enumerate(self.items.items()):
+            text = font.render(f"{item} - {data['cost']} Coins", True, WHITE)
+            screen.blit(text, (100, 150 + i * 50))
+
+        back_text = font.render("Back (ESC)", True, WHITE)
+        screen.blit(back_text, (50, HEIGHT - 100))
+
+# Игра
+class Game:
+    def __init__(self):
+        self.player = Player()
+        self.enemies = []
+        self.shop = Shop()
+        self.state = "menu" # menu, game, shop, battle
+        self.current_enemy = None
+
+    def spawn_enemy(self):
+        x = random.randint(50, WIDTH - 50)
+        y = random.randint(50, HEIGHT - 50)
+        self.enemies.append(Enemy(x, y))
+
+    def draw_menu(self):
+        screen.fill(BLACK)
+        title = big_font.render("Arlios Derest", True, WHITE)
+        start_text = font.render("1. Start Game 1", True, WHITE)
+        shop_text = font.render("2. Shop 2", True, WHITE)
+        exit_text = font.render("3. Leave 3", True, WHITE)
+        bg_sound = pygame.mixer.Sound('Music/Music.mp3')
+
+        screen.blit(title, (WIDTH // 2 - 150, 100))
+        screen.blit(start_text, (WIDTH // 2 - 100, 250))
+        screen.blit(shop_text, (WIDTH // 2 - 100, 300))
+        screen.blit(exit_text, (WIDTH // 2 - 100, 350))
+
+    def draw_game(self):
+        screen.fill(BLACK)
+        self.player.draw()
+        for enemy in self.enemies:
+            enemy.draw()
+
+        # Информация о игроке
+        stats = font.render(
+            f"Health: {self.player.health}/{self.player.max_health} | "
+            f"Attack: {self.player.attack} | "
+            f"Coins: {self.player.coins}", True, WHITE
+        )
+        screen.blit(stats, (10, 10))
+
+    def draw_battle(self):
+        screen.fill(BLACK)
+        self.player.draw()
+        self.current_enemy.draw()
+
+        battle_text = font.render("Battle!", True, RED)
+        attack_text = font.render("1. Attack", True, WHITE)
+        flee_text = font.render("2. Run away", True, WHITE)
+
+        screen.blit(battle_text, (WIDTH // 2 - 50, 50))
+        screen.blit(attack_text, (WIDTH // 2 - 100, 200))
+        screen.blit(flee_text, (WIDTH // 2 - 100, 250))
+
+    def handle_battle(self, choice):
+        if choice == "1": # Атака
+            damage = max(1, self.player.attack - self.current_enemy.attack // 2)
+            self.current_enemy.health -= damage
+
+            if self.current_enemy.health <= 0:
+                self.player.coins += random.randint(5, 15)
+                self.enemies.remove(self.current_enemy)
+                self.state = "game"
+                return
+
+            # Враг атакует в ответ
+            player_damage = max(1, self.current_enemy.attack - self.player.defense // 2)
+            self.player.health -= player_damage
+
+            if self.player.health <= 0:
+                print("Game Over!")
+                self.state = "menu"
+        elif choice == "2": # Сбежать
+            if random.random() < 0.7: # 70% шанс сбежать
+                self.state = "game"
+            else:
+                print("Failed!")
+
+    def run(self):
+        clock = pygame.time.Clock()
+        self.spawn_enemy()
+
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+
+                if event.type == pygame.KEYDOWN:
+                    if self.state == "menu":
+                        if event.key == pygame.K_1:
+                            self.state = "game"
+                        elif event.key == pygame.K_2:
+                            self.state = "shop"
+                        elif event.key == pygame.K_3:
+                            pygame.quit()
+                            sys.exit()
+
+                    elif self.state == "shop":
+                        if event.key == pygame.K_ESCAPE:
+                            self.state = "menu"
+                        elif event.key == pygame.K_1:
+                            self.shop.buy("Health +20", self.player)
+                        elif event.key == pygame.K_2:
+                            self.shop.buy("Attack +5", self.player)
+                        elif event.key == pygame.K_3:
+                            self.shop.buy("Protection +3", self.player)
+
+                    elif self.state == "battle":
+                        if event.key == pygame.K_1:
+                            self.handle_battle("1")
+                        elif event.key == pygame.K_2:
+                            self.handle_battle("2")
+
+            # Движение игрока
+            if self.state == "game":
+                keys = pygame.key.get_pressed()
+                dx, dy = 0, 0
+                if keys[pygame.K_a]: dx = -1
+                if keys[pygame.K_d]: dx = 1
+                if keys[pygame.K_w]: dy = -1
+                if keys[pygame.K_s]: dy = 1
+                self.player.move(dx, dy)
+
+                # Проверка столкновений с врагами
+                for enemy in self.enemies:
+                    if self.player.rect.colliderect(enemy.rect):
+                        self.current_enemy = enemy
+                        self.state = "battle"
+                        break
+
+            # Отрисовка
+            if self.state == "menu":
+                self.draw_menu()
+            elif self.state == "game":
+                self.draw_game()
+            elif self.state == "shop":
+                self.shop.draw()
+            elif self.state == "battle":
+                self.draw_battle()
+
+            pygame.display.flip()
+            clock.tick(60)
+
+if __name__ == "__main__":
+    game = Game()
+    game.run()
